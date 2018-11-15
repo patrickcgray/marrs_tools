@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import os
 import xml.etree.ElementTree
 import csv
@@ -43,8 +44,9 @@ for (_, day_aircraft_dirs, filenames) in os.walk(mypath): # descending into camp
                 print(fl)
                 flight = os.path.join(day_aircraft, flight)
                 for (_, flight_data_dirs, filenames) in os.walk(flight): # descending into flight dir to retrieve flight log
+                    alt_measurements = []
                     if aircraft_type == "L":
-                        alt_measurements = []
+
                         if "Sony" in flight_data_dirs:
                             img_files = os.listdir(os.path.join(flight, "Sony"))
                             for i in img_files:
@@ -73,28 +75,59 @@ for (_, day_aircraft_dirs, filenames) in os.walk(mypath): # descending into camp
                                                 alt_collection = root[1][1]
                                                 for alt_point in alt_collection.findall('trkpt'):
                                                     time = alt_point.find('time').text
-                                                    if time == "2018-08-27T20:15:15.8Z":
+                                                    time = timedelta(hours = int(time[10:12]), minutes = int(time[13:15]), seconds = int(timestamp[16:18]))
+                                                    if time == correctedtime:
                                                     # if time in list of time from timecorrection.csv
                                                         print("found it!!!")
                                                         lat = alt_point.attrib['lat']
                                                         lon = alt_point.attrib['lon']
                                                         extensions = alt_point.find("extensions")
                                                         laser = extensions.find('Laser').text
-                                                        alt = extensions.find('Altimeter').text
-                                                        print(lat, lon, laser, alt)
-                                                        alt_measurements.append([time, lat, lon, laser, alt.split(",")[0]])
-                            print(alt_measurements)
-                            with open(day_aircraft.split('/')[-1] + ".csv", 'w', newline='') as myfile:
-                                wr = csv.writer(myfile)
-                                wr.writerows(alt_measurements)
+                                                        if laser == 130:
+                                                            tm = timedelta(hours = int(time[:2]), minutes = int(time[2:4]), seconds = int(time[4:6]))
+                                                            #print(t)
+                                                            upperbound = tm + timedelta(seconds = 5)
+                                                            #print(upperbound)
+                                                            lowerbound = tm - timedelta(seconds = 5)
+                                                            #print (lowerbound)
+                                                            windowtime = []
+                                                            windowlaser = []
+                                                            windowtimediff = []
+                                                            for t, laser in zip(df_laser['Time'],df_laser['MedianAlt']):
+                                                                #print (t)
+                                                                t = timedelta(hours = int(t[:2]), minutes = int(t[2:4]), seconds = int(t[4:6]))
+                                                                #print(t)
+                                                                if t >= lowerbound and t <= upperbound:
+                                                                    #print (t)
+                                                                    windowtime += [t]
+                                                                    #laser = str(laser)
+                                                                    #print(laser)
+                                                                    windowlaser += [laser]
+                                                                    timediff = abs(t - tm)
+                                                                    #print(timediff)
+                                                                    windowtimediff += [timediff]
+                                                            d = {'time': windowtime, 'timediff': windowtimediff, 'laser': windowlaser}
+                                                            df_window = pd.DataFrame(data=d)
+                                                            df_window = df_window.drop(df_window[df_window.laser == 130.000].index)
+                                                            #print(df_window)
+                                                            values = df_window.loc[df_window['timediff'].idxmin()]
+                                                            time130 = values['time']
+                                                            las130 = values['laser']
+                                                            las130 = str(las130)
+                                                            laser = laser130 + "*"
+                                                        elif laser != 130:
+                                                            laser = laser
+                                                            time130 = np.nan
 
-                            print(day_aircraft + ".csv")
+                                                        baroalt = extensions.find('Altimeter').text
+                                                        print(lat, lon, laser, alt)
+
 
                         for data_dir in flight_data_dirs:
                             pass
 
 
-                    if aircraft_type == "A":
+                     if aircraft_type == "A":
                         alt_measurements = []
                         if "Sony" in flight_data_dirs:
                             img_files = os.listdir(os.path.join(flight, "Sony"))
@@ -113,7 +146,7 @@ for (_, day_aircraft_dirs, filenames) in os.walk(mypath): # descending into camp
                                     timecorrecting = timedelta(hours = int(timecorr[:2]), minutes = int(timecorr[3:5]), seconds = int(timecorr[6:8]))
                                     correctedtime = timestamp + timecorrecting
                                     correctedtime = str(correctedtime)
-                                    print(correctedtime)
+                                    #print(correctedtime)
 
                                     if "Flight_Log" in flight_data_dirs:
                                         log_files = os.listdir(os.path.join(flight, "Flight_Log"))
@@ -121,10 +154,10 @@ for (_, day_aircraft_dirs, filenames) in os.walk(mypath): # descending into camp
                                         log = log.replace("[","")
                                         log= log.replace("]","")
                                         log = log.replace("'","")
-                                        print(log)
+                                        #print(log)
                                         path = os.path.join(flight, "Flight_Log")
                                         item = os.path.join(path, log)
-                                        print(item)
+                                        #dfprint(item)
 
                                         df_baro =pd.read_csv(item, sep = ',', header = [11])
                                         l = list(df_baro)
@@ -136,7 +169,7 @@ for (_, day_aircraft_dirs, filenames) in os.walk(mypath): # descending into camp
                                                 ts = time
                                                 baroalt = baro
                                                 #print(baroalt)
-                                                alt_measurements.append([ts, baroalt.split(",")[0]])
+
                                                 #print(alt_measurements)
                                     if "Laser_Altimeter" in flight_data_dirs:
                                         laser_files = os.listdir(os.path.join(flight,"Laser_Altimeter"))
@@ -158,6 +191,7 @@ for (_, day_aircraft_dirs, filenames) in os.walk(mypath): # descending into camp
                                                 dfl = dfl.drop(['Altimeter'], axis = 1)
 
                                                 df_laser['MedianAlt'] =  dfl.median(axis=1, skipna = True)
+                                                #print(df_laser)
 
                                                 for time, laser, lat, lon in zip(df_laser['Time'], df_laser['MedianAlt'], df_laser["Latt"], df_laser["Long"]): #need to fix this part bc table is weird
                                                     #print(time)
@@ -165,19 +199,101 @@ for (_, day_aircraft_dirs, filenames) in os.walk(mypath): # descending into camp
                                                     time = time[:6]
                                                     corrtime = correctedtime.replace(":","")
                                                     if time == corrtime:
-                                                        laserG = laser
+
                                                         lat = lat
                                                         lon = lon
+                                                        if laser == 130:
+                                                            tm = timedelta(hours = int(time[:2]), minutes = int(time[2:4]), seconds = int(time[4:6]))
+                                                            #print(t)
+                                                            upperbound = tm + timedelta(seconds = 5)
+                                                            #print(upperbound)
+                                                            lowerbound = tm - timedelta(seconds = 5)
+                                                            #print (lowerbound)
+                                                            windowtime = []
+                                                            windowlaser = []
+                                                            windowtimediff = []
+                                                            for t, laser in zip(df_laser['Time'],df_laser['MedianAlt']):
+                                                                #print (t)
+                                                                t = timedelta(hours = int(t[:2]), minutes = int(t[2:4]), seconds = int(t[4:6]))
+                                                                #print(t)
+                                                                if t >= lowerbound and t <= upperbound:
+                                                                    #print (t)
+                                                                    windowtime += [t]
+                                                                    #laser = str(laser)
+                                                                    #print(laser)
+                                                                    windowlaser += [laser]
+                                                                    timediff = abs(t - tm)
+                                                                    #print(timediff)
+                                                                    windowtimediff += [timediff]
+                                                            d = {'time': windowtime, 'timediff': windowtimediff, 'laser': windowlaser}
+                                                            df_window = pd.DataFrame(data=d)
+                                                            df_window = df_window.drop(df_window[df_window.laser == 130.000].index)
+                                                            #print(df_window)
+                                                            values = df_window.loc[df_window['timediff'].idxmin()]
+                                                            time130 = values['time']
+                                                            las130 = values['laser']
+                                                            las130 = str(las130)
+                                                            laser = laser130 + "*"
+                                                        elif laser != 130:
+                                                            laser = laser
+                                                            time130 = np.nan
+
+
+
                                             if i == "L":
                                                 path = os.path.join(flight, "Laser_Altimeter")
                                                 fpath = os.path.join(path, item)
-                                                df_laser2 = pd.read_csv(fpath, sep = "  ", header = [2])
+                                                df_laser2 = pd.read_csv(fpath, sep = "\t", header = [2])
+                                                #print (df_laser2)
                                                 for time, laser2 in zip(df_laser2['gmt_time'], df_laser2['laser_altitude_cm']):
                                                     time = str(time)
                                                     if time ==correctedtime:
                                                         l = laser2
                                                         l = float(laser2)
                                                         laserL = l/100
+                                                        if laser == 130:
+                                                            tm = timedelta(hours = int(time[:2]), minutes = int(time[2:4]), seconds = int(time[4:6]))
+                                                            #print(t)
+                                                            upperbound = tm + timedelta(seconds = 5)
+                                                            #print(upperbound)
+                                                            lowerbound = tm - timedelta(seconds = 5)
+                                                            #print (lowerbound)
+                                                            windowtime = []
+                                                            windowlaser = []
+                                                            windowtimediff = []
+                                                            for t, laser in zip(df_laser['Time'],df_laser['MedianAlt']):
+                                                                #print (t)
+                                                                t =  timedelta(hours = int(t[:2]), minutes = int(t[3:5]), seconds = int(t[6:8]))
+                                                                #print(t)
+                                                                if t >= lowerbound and t <= upperbound:
+                                                                    #print (t)
+                                                                    windowtime += [t]
+                                                                    #laser = str(laser)
+                                                                    #print(laser)
+                                                                    windowlaser += [laser]
+                                                                    timediff = abs(t - tm)
+                                                                    #print(timediff)
+                                                                    windowtimediff += [timediff]
+                                                            d = {'time': windowtime, 'timediff': windowtimediff, 'laser': windowlaser}
+                                                            df_window = pd.DataFrame(data=d)
+                                                            df_window = df_window.drop(df_window[df_window.laser == 130.000].index)
+                                                            #print(df_window)
+                                                            values = df_window.loc[df_window['timediff'].idxmin()]
+                                                            time130_L = values['time']
+                                                            las130 = values['laser']
+                                                            las130 = str(las130)
+                                                            laserL = laser130 + "*"
+                                                        elif laser != 130:
+                                                            laserL = laser
+                                                            time130_L = np.nan
+
+                            alt_measurements.append([correctedtime, lat, lon, baroalt, time130, laser, time130_L, laserL .split(",")[0]])
+                            print(alt_measurements)
+                            with open(day_aircraft.split('/')[-1] + ".csv", 'w', newline='') as myfile:
+                                wr = csv.writer(myfile)
+                                wr.writerows(alt_measurements)
+
+                            print(day_aircraft + ".csv")
 
                         pass
                          # TODO for Clara
