@@ -51,6 +51,7 @@ for (_, day_aircraft_dirs, filenames) in os.walk(mypath): # descending into camp
                             img_files = os.listdir(os.path.join(flight, "Sony"))
                             for i in img_files:
                                 if i.endswith(".JPG"):
+                                    image_name = i
                                     fold = "Sony\\" + i
                                     imgF = os.path.join(flight, fold)
                                     #print (imgF)
@@ -287,7 +288,7 @@ for (_, day_aircraft_dirs, filenames) in os.walk(mypath): # descending into camp
                                                             laserL = laser
                                                             time130_L = np.nan
 
-                            alt_measurements.append([correctedtime, lat, lon, baroalt, time130, laser, time130_L, laserL .split(",")[0]])
+                            alt_measurements.append([image_name, correctedtime, lat, lon, baroalt, time130, laser, time130_L, laserL .split(",")[0]])
                             print(alt_measurements)
                             with open(day_aircraft.split('/')[-1] + ".csv", 'w', newline='') as myfile:
                                 wr = csv.writer(myfile)
